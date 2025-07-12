@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The LLM Evaluator's Playbook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: "Warm Neutral Gray" with Slate and Amber accents -->
+    <!-- Application Structure Plan: The SPA is designed as a task-oriented dashboard with tabbed navigation, not a linear report. This structure was chosen for usability, allowing users to quickly access the specific information they need—whether it's a deep dive on a capability, understanding benchmark evolution, or finding relevant tests for their application. The main sections are: "Home" (an overview of the capability pillars), "Deep Dive" (an explorable library of all benchmarks filterable by pillar), "Benchmark Evolution" (visualizing the 'arms race' in evaluation), and the "Application Matrix" (an interactive tool for mapping use cases to benchmarks). This non-linear approach empowers users to explore based on their immediate questions, making the dense report content much more digestible and actionable. -->
+    <!-- Visualization & Content Choices:
+        - Report Info: Five Capability Pillars -> Goal: Inform -> Viz: Interactive cards with icons on the homepage. Interaction: Click to filter benchmarks in the Deep Dive section. Justification: Provides an immediate, visual overview of the core evaluation concepts. Library/Method: HTML/CSS with JS for filtering.
+        - Report Info: Individual benchmark details -> Goal: Organize & Inform -> Viz: Standardized info cards in the Deep Dive. Interaction: Expand/collapse to show "Critical Lens" details. Justification: Organizes complex information into digestible, comparable chunks. Library/Method: HTML/CSS with JS for toggling visibility.
+        - Report Info: Benchmark evolution (e.g., HumanEval -> HumanEval+) -> Goal: Compare & Change -> Viz: Dynamic bar chart showing the "robustness gap" (performance drop). Interaction: Hover for tooltips. Justification: Visually demonstrates the critical concept of benchmark rigor far more effectively than text alone. Library/Method: Chart.js (Canvas).
+        - Report Info: Application-to-Benchmark Mapping (Table 3) -> Goal: Relationships & Compare -> Viz: Interactive HTML table. Interaction: Click a row (application) to highlight critical/high importance benchmarks. Justification: Turns a static table into a decision-making tool. Library/Method: HTML/CSS with JS for highlighting.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .tab-active { border-color: #f59e0b; color: #f59e0b; }
+        .tab-inactive { border-color: transparent; color: #475569; }
+        .pillar-card { transition: all 0.2s ease-in-out; }
+        .pillar-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+        .benchmark-card.hidden { display: none; }
+        .matrix-highlight-critical { background-color: #fef3c7 !important; font-weight: 600; }
+        .matrix-highlight-high { background-color: #fef9c3 !important; }
+        .chart-container { position: relative; width: 100%; max-width: 900px; margin-left: auto; margin-right: auto; height: 350px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 400px; } }
+    </style>
+</head>
+<body class="text-slate-700">
+
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-800">The LLM Evaluator's Playbook</h1>
+            <p class="mt-4 text-lg text-slate-500 max-w-3xl mx-auto">An interactive guide to translate abstract benchmarks into actionable insights for selecting the right model for the job.</p>
+        </header>
+
+        <nav class="mb-10 border-b border-slate-200">
+            <ul class="flex flex-wrap -mb-px justify-center text-sm font-medium text-center">
+                <li class="mr-2"><a href="#" class="inline-block p-4 border-b-2 rounded-t-lg tab-active" data-tab="home">🏠 Home</a></li>
+                <li class="mr-2"><a href="#" class="inline-block p-4 border-b-2 rounded-t-lg tab-inactive" data-tab="deep-dive">🔬 Deep Dive</a></li>
+                <li class="mr-2"><a href="#" class="inline-block p-4 border-b-2 rounded-t-lg tab-inactive" data-tab="evolution">📈 Benchmark Evolution</a></li>
+                <li class="mr-2"><a href="#" class="inline-block p-4 border-b-2 rounded-t-lg tab-inactive" data-tab="matrix">📋 Application Matrix</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <section id="home" class="tab-content">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-slate-800">The Five Pillars of LLM Capability</h2>
+                    <p class="mt-3 text-slate-500 max-w-2xl mx-auto">To quickly evaluate a model, start by understanding its strengths and weaknesses across these five fundamental pillars. Click a pillar to filter the benchmarks in the "Deep Dive" section.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                    <div class="pillar-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer" data-pillar="Language & Commonsense Reasoning">
+                        <div class="text-4xl mb-4">🗣️</div>
+                        <h3 class="font-bold text-lg text-slate-800">Language & Commonsense</h3>
+                        <p class="text-sm text-slate-500 mt-2">Grasping nuance, context, and the unstated rules of the real world. The foundation of coherent interaction.</p>
+                    </div>
+                    <div class="pillar-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer" data-pillar="Knowledge & Multitask Application">
+                        <div class="text-4xl mb-4">📚</div>
+                        <h3 class="font-bold text-lg text-slate-800">Knowledge & Application</h3>
+                        <p class="text-sm text-slate-500 mt-2">Applying deep encyclopedic knowledge across specialized domains like law, medicine, and history.</p>
+                    </div>
+                    <div class="pillar-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer" data-pillar="Abstract & Algorithmic Reasoning">
+                        <div class="text-4xl mb-4">🧠</div>
+                        <h3 class="font-bold text-lg text-slate-800">Abstract Reasoning</h3>
+                        <p class="text-sm text-slate-500 mt-2">Solving novel problems from few examples; a measure of fluid intelligence beyond memorization.</p>
+                    </div>
+                    <div class="pillar-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer" data-pillar="Mathematical & Logical Reasoning">
+                        <div class="text-4xl mb-4">🧮</div>
+                        <h3 class="font-bold text-lg text-slate-800">Math & Logic</h3>
+                        <p class="text-sm text-slate-500 mt-2">Performing reliable, multi-step calculations and solving complex, formal logic problems.</p>
+                    </div>
+                    <div class="pillar-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm cursor-pointer" data-pillar="Code & Functional Proficiency">
+                        <div class="text-4xl mb-4">💻</div>
+                        <h3 class="font-bold text-lg text-slate-800">Code Proficiency</h3>
+                        <p class="text-sm text-slate-500 mt-2">Generating functionally correct and robust code that passes rigorous unit tests.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="deep-dive" class="tab-content hidden">
+                 <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-slate-800">Benchmark Deep Dive</h2>
+                    <p class="mt-3 text-slate-500 max-w-2xl mx-auto">Explore individual benchmarks. The list below is filtered by the pillar you selected on the Home page. Click 'Show All' to reset.</p>
+                    <button id="show-all-benchmarks" class="mt-4 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600">Show All</button>
+                </div>
+                <div id="benchmark-grid" class="space-y-6"></div>
+            </section>
+
+            <section id="evolution" class="tab-content hidden">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-slate-800">The Benchmark "Arms Race"</h2>
+                    <p class="mt-3 text-slate-500 max-w-3xl mx-auto">Benchmarks must constantly evolve to combat contamination and saturation. A high score on an older benchmark is a weaker signal than on its modern, more rigorous successor. This chart shows the "robustness gap" for coding benchmarks—the performance drop when moving to a version with more tests, revealing which models produce more reliable code.</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="chart-container">
+                        <canvas id="evolutionChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section id="matrix" class="tab-content hidden">
+                 <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-slate-800">Application-to-Benchmark Matrix</h2>
+                    <p class="mt-3 text-slate-500 max-w-3xl mx-auto">What's the best test for your feature? Click on a real-world application below to instantly highlight the most critical benchmarks you should consider in your evaluation.</p>
+                </div>
+                <div class="overflow-x-auto bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <table id="app-matrix" class="w-full text-sm text-left text-slate-500">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Real-World Application</th>
+                                <th scope="col" class="px-6 py-3 text-center">Language & Commonsense</th>
+                                <th scope="col" class="px-6 py-3 text-center">Knowledge & Multitask</th>
+                                <th scope="col" class="px-6 py-3 text-center">Abstract Reasoning</th>
+                                <th scope="col" class="px-6 py-3 text-center">Math & Logic</th>
+                                <th scope="col" class="px-6 py-3 text-center">Code Proficiency</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+<script>
+const benchmarks = [
+    { name: "HellaSwag", pillar: "Language & Commonsense Reasoning", purpose: "Tests narrative commonsense by choosing the most plausible continuation against adversarially generated endings.", lens: "Known quality issues exist (ungrammatical sentences, typos), which can introduce noise. Use with caution." },
+    { name: "Winogrande", pillar: "Language & Commonsense Reasoning", purpose: "Assesses commonsense by resolving ambiguous pronouns in sentences designed to be robust against statistical biases.", lens: "A strong, reliable benchmark for contextual understanding and co-reference resolution, key for summarization and dialogue." },
+    { name: "CommonsenseQA", pillar: "Language & Commonsense Reasoning", purpose: "Measures relational commonsense knowledge using questions where distractors are semantically close to the correct answer.", lens: "Good for general commonsense, but ensure it aligns with the specific type of relational knowledge your application needs." },
+    { name: "PIQA", pillar: "Language & Commonsense Reasoning", purpose: "Evaluates physical commonsense by asking a model to choose the correct method to achieve a real-world physical goal.", lens: "Essential for any app grounded in the real world (robotics, DIY guides). A low score here is a major red flag for 'ungrounded' models." },
+    { name: "OpenBookQA", pillar: "Language & Commonsense Reasoning", purpose: "Tests the ability to apply a given set of 'open book' facts to novel situations using external common knowledge.", lens: "A direct proxy for Retrieval-Augmented Generation (RAG) performance. Tests synthesis, not just retrieval." },
+    { name: "MMLU-CF", pillar: "Knowledge & Multitask Application", purpose: "Provides a contamination-resistant measure of broad academic and professional knowledge using a private test set.", lens: "The gold standard for trustworthy knowledge evaluation. Prioritize this over the original MMLU." },
+    { name: "MMLU Pro", pillar: "Knowledge & Multitask Application", purpose: "A more difficult, reasoning-intensive version of MMLU designed to differentiate top-tier models.", lens: "Use this to see meaningful performance gaps between elite models (e.g., GPT-4o vs Claude 3.7). The original MMLU is saturated." },
+    { name: "ARC", pillar: "Abstract & Algorithmic Reasoning", purpose: "An 'AI IQ test' that measures abstract reasoning and skill acquisition on novel visual grid puzzles from a few examples.", lens: "A research-frontier benchmark. Current models score near zero. A good score here would signal a major architectural breakthrough." },
+    { name: "GSM8K", pillar: "Mathematical & Logical Reasoning", purpose: "Evaluates multi-step arithmetic reasoning on grade-school-level word problems.", lens: "Critical for business intelligence and data analysis. Use the cleaned 'GSM8K-Platinum' version for the most accurate signal." },
+    { name: "MATH", pillar: "Mathematical & Logical Reasoning", purpose: "Assesses advanced mathematical problem-solving on competition-level questions across various subjects.", lens: "Tests the ceiling of a model's formal reasoning. A huge performance drop from GSM8K is expected and reveals the 'reasoning cliff'." },
+    { name: "HumanEval+", pillar: "Code & Functional Proficiency", purpose: "Measures functional correctness of Python code with a highly rigorous and comprehensive set of unit tests (80x original).", lens: "The modern standard. The performance drop from the original HumanEval to HumanEval+ is a key metric for code robustness." },
+    { name: "MBPP+", pillar: "Code & Functional Proficiency", purpose: "Evaluates basic Python programming skills with a rigorous set of unit tests (35x original).", lens: "Like HumanEval+, this tests for robust, functional correctness, not just superficial accuracy on a few tests." }
+];
+
+const matrixData = [
+    { app: "Customer Support Chatbot", ratings: { "Language & Commonsense Reasoning": "Critical", "Knowledge & Multitask Application": "High", "Abstract & Algorithmic Reasoning": "Low", "Mathematical & Logical Reasoning": "Medium", "Code & Functional Proficiency": "Low" } },
+    { app: "Legal Document Summarizer & Analyst", ratings: { "Language & Commonsense Reasoning": "Critical", "Knowledge & Multitask Application": "Critical", "Abstract & Algorithmic Reasoning": "Medium", "Mathematical & Logical Reasoning": "Medium", "Code & Functional Proficiency": "Low" } },
+    { app: "Data Analysis Copilot", ratings: { "Language & Commonsense Reasoning": "High", "Knowledge & Multitask Application": "Medium", "Abstract & Algorithmic Reasoning": "Medium", "Mathematical & Logical Reasoning": "Critical", "Code & Functional Proficiency": "High" } },
+    { app: "Code Generation Assistant / Copilot", ratings: { "Language & Commonsense Reasoning": "High", "Knowledge & Multitask Application": "Medium", "Abstract & Algorithmic Reasoning": "Medium", "Mathematical & Logical Reasoning": "Low", "Code & Functional Proficiency": "Critical" } },
+    { app: "Marketing & Ad Copywriter", ratings: { "Language & Commonsense Reasoning": "Critical", "Knowledge & Multitask Application": "Medium", "Abstract & Algorithmic Reasoning": "Low", "Mathematical & Logical Reasoning": "Low", "Code & Functional Proficiency": "Low" } },
+    { app: "Scientific Research Assistant", ratings: { "Language & Commonsense Reasoning": "High", "Knowledge & Multitask Application": "Critical", "Abstract & Algorithmic Reasoning": "High", "Mathematical & Logical Reasoning": "Critical", "Code & Functional Proficiency": "High" } },
+    { app: "General Purpose Enterprise Assistant", ratings: { "Language & Commonsense Reasoning": "Critical", "Knowledge & Multitask Application": "High", "Abstract & Algorithmic Reasoning": "Low", "Mathematical & Logical Reasoning": "Medium", "Code & Functional Proficiency": "Medium" } },
+    { app: "Robotics / Physical Task Planner", ratings: { "Language & Commonsense Reasoning": "Critical", "Knowledge & Multitask Application": "Medium", "Abstract & Algorithmic Reasoning": "High", "Mathematical & Logical Reasoning": "High", "Code & Functional Proficiency": "High" } }
+];
+
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('[data-tab]');
+    const contents = document.querySelectorAll('.tab-content');
+    const benchmarkGrid = document.getElementById('benchmark-grid');
+    const matrixBody = document.querySelector('#app-matrix tbody');
+    const pillarCards = document.querySelectorAll('.pillar-card');
+    const showAllBtn = document.getElementById('show-all-benchmarks');
+
+    function renderBenchmarks(filterPillar = null) {
+        benchmarkGrid.innerHTML = '';
+        const filteredBenchmarks = filterPillar 
+            ? benchmarks.filter(b => b.pillar === filterPillar)
+            : benchmarks;
+
+        filteredBenchmarks.forEach(b => {
+            const card = document.createElement('div');
+            card.className = 'benchmark-card bg-white p-6 rounded-xl border border-slate-200 shadow-sm';
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-bold text-xl text-slate-800">${b.name}</h4>
+                        <span class="text-xs font-medium bg-amber-100 text-amber-800 py-0.5 px-2 rounded-full">${b.pillar}</span>
+                    </div>
+                    <button class="toggle-lens text-sm text-amber-600 hover:text-amber-800 font-semibold">Show Lens ▼</button>
+                </div>
+                <p class="text-slate-600 mt-4">${b.purpose}</p>
+                <div class="lens-content hidden mt-4 p-4 bg-slate-50 border-l-4 border-amber-400 rounded">
+                    <h5 class="font-bold text-slate-700">🔍 Critical Lens</h5>
+                    <p class="text-sm text-slate-600 mt-1">${b.lens}</p>
+                </div>
+            `;
+            benchmarkGrid.appendChild(card);
+        });
+    }
+    
+    function renderMatrix() {
+        matrixData.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = 'bg-white border-b hover:bg-slate-50 cursor-pointer';
+            tr.innerHTML = `
+                <th scope="row" class="px-6 py-4 font-medium text-slate-900 whitespace-nowrap">${row.app}</th>
+                <td class="px-6 py-4 text-center">${row.ratings['Language & Commonsense Reasoning']}</td>
+                <td class="px-6 py-4 text-center">${row.ratings['Knowledge & Multitask Application']}</td>
+                <td class="px-6 py-4 text-center">${row.ratings['Abstract & Algorithmic Reasoning']}</td>
+                <td class="px-6 py-4 text-center">${row.ratings['Mathematical & Logical Reasoning']}</td>
+                <td class="px-6 py-4 text-center">${row.ratings['Code & Functional Proficiency']}</td>
+            `;
+            matrixBody.appendChild(tr);
+        });
+    }
+
+    function switchTab(targetTab) {
+        tabs.forEach(tab => {
+            const isTarget = tab.dataset.tab === targetTab;
+            tab.classList.toggle('tab-active', isTarget);
+            tab.classList.toggle('tab-inactive', !isTarget);
+        });
+        contents.forEach(content => {
+            content.classList.toggle('hidden', content.id !== targetTab);
+        });
+    }
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchTab(e.target.dataset.tab);
+        });
+    });
+    
+    pillarCards.forEach(card => {
+        card.addEventListener('click', () => {
+            const pillar = card.dataset.pillar;
+            renderBenchmarks(pillar);
+            switchTab('deep-dive');
+        });
+    });
+
+    showAllBtn.addEventListener('click', () => {
+        renderBenchmarks();
+    });
+
+    benchmarkGrid.addEventListener('click', (e) => {
+        if (e.target.classList.contains('toggle-lens')) {
+            const btn = e.target;
+            const content = btn.closest('.benchmark-card').querySelector('.lens-content');
+            const isHidden = content.classList.toggle('hidden');
+            btn.textContent = isHidden ? 'Show Lens ▼' : 'Hide Lens ▲';
+        }
+    });
+
+    matrixBody.addEventListener('click', e => {
+        const row = e.target.closest('tr');
+        if (!row) return;
+
+        document.querySelectorAll('#app-matrix tbody tr').forEach(r => {
+            r.querySelectorAll('td').forEach(td => {
+                td.classList.remove('matrix-highlight-critical', 'matrix-highlight-high');
+            });
+        });
+
+        row.querySelectorAll('td').forEach(td => {
+            if (td.textContent.trim() === 'Critical') {
+                td.classList.add('matrix-highlight-critical');
+            } else if (td.textContent.trim() === 'High') {
+                td.classList.add('matrix-highlight-high');
+            }
+        });
+    });
+
+    const ctx = document.getElementById('evolutionChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Top-Tier Model A (Robust)', 'Top-Tier Model B (Fragile)'],
+            datasets: [{
+                label: 'Original HumanEval',
+                data: [92, 95],
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1
+            }, {
+                label: 'HumanEval+ (More Rigorous)',
+                data: [90, 85],
+                backgroundColor: 'rgba(245, 158, 11, 0.5)',
+                borderColor: 'rgba(245, 158, 11, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: 80,
+                    max: 100,
+                    title: { display: true, text: 'Pass@1 Accuracy (%)' }
+                }
+            },
+            plugins: {
+                title: { display: true, text: 'The Robustness Gap: HumanEval vs. HumanEval+', font: { size: 16 } },
+                tooltip: {
+                    callbacks: {
+                        afterBody: function(context) {
+                            const datasetIndex = context[0].datasetIndex;
+                            const dataIndex = context[0].dataIndex;
+                            const originalScore = this.chart.data.datasets[0].data[dataIndex];
+                            const plusScore = this.chart.data.datasets[1].data[dataIndex];
+                            const gap = originalScore - plusScore;
+                            return `\nRobustness Gap: ${gap.toFixed(1)}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    renderBenchmarks();
+    renderMatrix();
+});
+</script>
+
+</body>
+</html>
